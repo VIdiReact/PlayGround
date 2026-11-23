@@ -10,9 +10,15 @@ radio:{name:'Radio Shack',type:'TUNE TRANSMISSION',x:-.05,y:-.46,done:false}
 };
 
 let state={night:1,completed:{},load:[42,28,18,12],dishAz:118,dishEl:31,relaySteps:[],radioDial:52,ending:null,muted:false,entries:[]};
-let player={x:-.10,y:.12,a:0,walk:0};
+let player={x:-.10,y:.12,a:0,walk:0,body:100,stamina:100};
 let keys={};let cameraShake=0;let nearest=null;let toastTimer=0;
 let rain=[];let fireflies=[];
+let introVisible=false;
+const nightBriefs=[
+  {title:'Restore the carrier',text:'Stabilize four systems before the 01:00 weather window closes.',weather:'MONSOON · 24°'},
+  {title:'Hold the eastern relay',text:'Repeat the station checks. Signal interference is rising beyond the ridge.',weather:'HIGH WIND · 22°'},
+  {title:'Survive the final watch',text:'Complete one last service cycle and decide whether to answer the unknown voice.',weather:'SEVERED LINE · 19°'}
+];
 
 try{const saved=JSON.parse(localStorage.getItem(SAVE)||'null');if(saved)state={...state,...saved};}catch(e){}
 Object.keys(stations).forEach(k=>stations[k].done=!!state.completed[k]);
@@ -119,7 +125,16 @@ function drawPlayer(ctx,p,s){
 function update(dt){
   let dx=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0)+ (window.touchDX||0);
   let dy=(keys.ArrowDown||keys.s?1:0)-(keys.ArrowUp||keys.w?1:0)+(window.touchDY||0);
-  const mag=Math.hypot(dx,dy);if(mag){dx/=mag;dy/=mag;player.x=Math.max(-.82,Math.min(.82,player.x+dx*.43*dt));player.y=Math.max(-.68,Math.min(.68,player.y+dy*.43*dt));player.a=Math.atan2(dy,dx);player.walk+=dt*9;}
+  const mag=Math.hypot(dx,dy);
+  if(mag){
+    dx/=mag;dy/=mag;
+    const sprint=(keys.Shift||keys.shift)&&player.stamina>4;
+    const speed=(sprint?.62:.43);
+    if(sprint){player.stamina=Math.max(0,player.stamina-dt*15);}else{player.stamina=Math.min(100,player.stamina+dt*9);}
+    player.x=Math.max(-.82,Math.min(.82,player.x+dx*speed*dt));
+    player.y=Math.max(-.68,Math.min(.68,player.y+dy*speed*dt));
+    player.a=Math.atan2(dy,dx);player.walk+=dt*(sprint?13:9);
+  }else{player.stamina=Math.min(100,player.stamina+dt*12);}
   nearest=null;let nd=1;
   Object.entries(stations).forEach(([k,s])=>{if(s.done)return;let d=Math.hypot(player.x-s.x,player.y-s.y);if(d<.19&&d<nd){nearest=k;nd=d;}});
   const el=$('#interaction');el.classList.toggle('visible',!!nearest);
@@ -129,13 +144,33 @@ function update(dt){
 function frame(t){update(Math.min(.033,(t-(frame.last||t))/1000));frame.last=t;drawWorld();requestAnimationFrame(frame);}requestAnimationFrame(frame);
 
 function completedCount(){return Object.values(stations).filter(s=>s.done).length;}
+
+function addJournal(title,text){
+  state.entries.unshift({title,text});
+  state.entries=state.entries.slice(0,12);
+  save();
+}
+
+function showNightBrief(){
+  const brief=nightBriefs[Math.max(0,Math.min(2,state.night-1))];
+  modal(brief.title,'NIGHT '+String(state.night).padStart(2,'0')+' BRIEFING',`<div class="radio-copy"><p>${brief.text}</p><p><strong>Weather:</strong> ${brief.weather}</p></div>`,'<button class="primary-action" id="beginNight">BEGIN WATCH</button>');
+  $('#beginNight').onclick=closeModal;
+}
 function updateHUD(){
   $('#nightLabel').textContent=`NIGHT ${String(state.night).padStart(2,'0')}`;
-  const count=completedCount();$('#objectiveCount').textContent=`${count} / 4`;$('#objectiveBar').style.width=`${count*25}%`;
-  $('#bodyValue').textContent='100';$('#powerValue').textContent=state.night===1?'72':state.night===2?'64':'58';$('#powerBar').style.width=$('#powerValue').textContent+'%';
-  $('#objectiveText').textContent=count===4?'Every system is stable. Return to the radio desk to transmit.':'Check the marked station equipment before the monsoon closes in.';
-  $('#objectiveTitle').textContent=count===4?'Begin night transmission':'Restore the station';
-  $('#signalText').textContent=count===4?'CARRIER LOCKED':'NO CARRIER';
+  const count=completedCount();
+  const serviceCount=Object.keys(stations).filter(k=>k!=='radio').filter(k=>stations[k].done).length;
+  $('#objectiveCount').textContent=`${serviceCount} / 3`;
+  $('#objectiveBar').style.width=`${serviceCount*(100/3)}%`;
+  $('#bodyValue').textContent=Math.round(player.body);
+  $('#bodyBar').style.width=player.body+'%';
+  $('#powerValue').textContent=state.night===1?'72':state.night===2?'64':'58';
+  $('#powerBar').style.width=$('#powerValue').textContent+'%';
+  const brief=nightBriefs[state.night-1];
+  $('#objectiveText').textContent=serviceCount===3?'The station is stable. Tune the radio carrier, then make the night’s choice.':brief.text;
+  $('#objectiveTitle').textContent=serviceCount===3?'Listen to the carrier':brief.title;
+  $('#weatherText').textContent=brief.weather;
+  $('#signalText').textContent=stations.radio.done?'CARRIER LOCKED':'NO CARRIER';
 }
 
 function openJob(kind){
@@ -148,7 +183,11 @@ function modal(title,kicker,body,foot=''){
   $('#modalBackdrop').classList.remove('hidden');$('#closeModal').onclick=closeModal;
 }
 function closeModal(){ $('#modalBackdrop').classList.add('hidden'); }
-function complete(kind,msg){stations[kind].done=true;state.completed[kind]=true;save();updateHUD();closeModal();toast(msg);}
+function complete(kind,msg){
+  stations[kind].done=true;state.completed[kind]=true;
+  addJournal(msg,`Night ${state.night}: ${stations[kind].name} returned to a working state.`);
+  updateHUD();closeModal();toast(msg);
+}
 
 function openGenerator(){
   const names=['Core pump','Comms rack','Workshop','Flood lamps'];
@@ -171,17 +210,18 @@ function openRelay(){
 }
 
 function openRadio(){
-  modal('Long-range receiver','RADIO 45-B','<div class="radio-grid"><div class="radio-screen"><div class="radio-frequency"><span id="freqNum">5.2</span> <small>MHz</small></div><canvas id="radioCanvas" width="300" height="70"></canvas></div><div class="radio-copy"><strong id="voiceText">The carrier is weak.</strong><p id="radioHint">Move across the band until the voice resolves.</p><input id="radioDial" type="range" min="38" max="68" value="52" style="width:100%;accent-color:#b8dc91"><div class="choice-list hidden" id="radioChoices"><button data-choice="reply">Reply: “Jungle Tower, we hear you.”</button><button data-choice="ignore">Remain silent and record the signal.</button></div></div></div>','<button class="secondary-action" id="closeRadio">LEAVE RECEIVER</button>');
+  const serviceComplete=Object.keys(stations).filter(k=>k!=='radio').every(k=>stations[k].done);
+  modal('Long-range receiver','RADIO 45-B','<div class="radio-grid"><div class="radio-screen"><div class="radio-frequency"><span id="freqNum">5.2</span> <small>MHz</small></div><canvas id="radioCanvas" width="300" height="70"></canvas></div><div class="radio-copy"><strong id="voiceText">The carrier is weak.</strong><p id="radioHint">Service the three equipment stations first.</p><input id="radioDial" type="range" min="38" max="68" value="52" style="width:100%;accent-color:#b8dc91" '+(serviceComplete?'':'disabled')+'><div class="choice-list hidden" id="radioChoices"><button data-choice="reply">Reply: “Jungle Tower, we hear you.”</button><button data-choice="ignore">Remain silent and record the signal.</button></div></div></div>','<button class="secondary-action" id="closeRadio">LEAVE RECEIVER</button>');
   $('#closeRadio').onclick=closeModal;
-  function drawRadio(){let v=+$('#radioDial').value;$('#freqNum').textContent=(v/10).toFixed(1);let c=$('#radioCanvas'),x=c.getContext('2d');x.clearRect(0,0,300,70);x.strokeStyle='rgba(184,220,145,.2)';for(let i=0;i<300;i+=25){x.beginPath();x.moveTo(i,0);x.lineTo(i,70);x.stroke()}x.beginPath();let target=state.night===1?52:state.night===2?61:44;for(let i=0;i<300;i++){let f=i/300*30+38,noise=.5*Math.exp(-Math.pow(f-target,2)/2)+.08*Math.random();let y=50-Math.abs(noise*28)*Math.sin(i*.12+Date.now()/120);if(i===0)x.moveTo(i,y);else x.lineTo(i,y);}x.strokeStyle='#b8dc91';x.stroke();if(Math.abs(v-target)<=1){$('#voiceText').textContent=state.night===1?'“Tower Seven… keep the light alive.”':state.night===2?'“The canopy moved before the landslide.”':'“Do not answer on the third call.”';$('#radioChoices').classList.remove('hidden');$('#radioHint').textContent='Voice lock established.';}else{$('#voiceText').textContent='The carrier is weak.';$('#radioHint').textContent='Move across the band until the voice resolves.';$('#radioChoices').classList.add('hidden');}}
+  function drawRadio(){let v=+$('#radioDial').value;$('#freqNum').textContent=(v/10).toFixed(1);let c=$('#radioCanvas'),x=c.getContext('2d');x.clearRect(0,0,300,70);x.strokeStyle='rgba(184,220,145,.2)';for(let i=0;i<300;i+=25){x.beginPath();x.moveTo(i,0);x.lineTo(i,70);x.stroke()}x.beginPath();let target=state.night===1?52:state.night===2?61:44;for(let i=0;i<300;i++){let f=i/300*30+38,noise=.5*Math.exp(-Math.pow(f-target,2)/2)+.08*Math.random();let y=50-Math.abs(noise*28)*Math.sin(i*.12+Date.now()/120);if(i===0)x.moveTo(i,y);else x.lineTo(i,y);}x.strokeStyle='#b8dc91';x.stroke();if(serviceComplete&&Math.abs(v-target)<=1){$('#voiceText').textContent=state.night===1?'“Tower Seven… keep the light alive.”':state.night===2?'“The canopy moved before the landslide.”':'“Do not answer on the third call.”';$('#radioChoices').classList.remove('hidden');$('#radioHint').textContent='Voice lock established.';if(!stations.radio.done){complete('radio','Carrier signal resolved');}}else if(!serviceComplete){$('#voiceText').textContent='The carrier is weak.';$('#radioHint').textContent='Service generator, mast and relay before tuning.';}else{$('#voiceText').textContent='The carrier is weak.';$('#radioHint').textContent='Move across the band until the voice resolves.';$('#radioChoices').classList.add('hidden');}}
   $('#radioDial').oninput=drawRadio;drawRadio();
-  document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{if(completedCount()===4){state.ending=b.dataset.choice;save();closeModal();showEnding();}else toast('Restore all station systems before transmission');});
+  document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{if(serviceComplete&&stations.radio.done){state.ending=b.dataset.choice;save();closeModal();showEnding();}else toast('Tune the carrier after all equipment is restored');});
 }
 
 function showEnding(){
   const choice=state.ending;
   modal(choice==='reply'?'Signal held':'Watch remains','NIGHT '+String(state.night).padStart(2,'0')+' COMPLETE',`<div class="radio-copy"><p>${choice==='reply'?'You answer through the wet night. The distant voice repeats your call sign—then the tower light above you begins to blink in recognition.':'You leave the carrier intact and save every syllable. At dawn, the recorder resolves a map hidden beneath the interference.'}</p><p>The jungle stays, and the station stays awake.</p></div>`,'<button class="primary-action" id="nextNight">'+(state.night<3?'CONTINUE TO NEXT NIGHT':'SAVE FINAL RECORD')+'</button>');
-  $('#nextNight').onclick=()=>{if(state.night<3){state.night++;Object.keys(stations).forEach(k=>{stations[k].done=false;state.completed[k]=false});state.ending=null;save();updateHUD();closeModal();toast(`Night ${state.night} watch started`);}else{closeModal();toast('Final record saved to this device');}};
+  $('#nextNight').onclick=()=>{if(state.night<3){state.night++;Object.keys(stations).forEach(k=>{stations[k].done=false;state.completed[k]=false});state.ending=null;player.body=100;player.stamina=100;save();updateHUD();closeModal();showNightBrief();toast(`Night ${state.night} watch started`);}else{addJournal('Final watch recorded','The final transmission has been preserved on this device.');closeModal();toast('Final record saved to this device');}};
 }
 
 window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key==='e'||e.key==='E')if(nearest)openJob(nearest);});window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
