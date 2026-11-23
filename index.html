@@ -2,59 +2,70 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#101513" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#101713" />
   <title>Midnight Signal — Jungle Tower</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23101513'/%3E%3Cpath d='M8 24V10l8 14 8-14v14' fill='none' stroke='%23b9e28e' stroke-width='3'/%3E%3C/svg%3E" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23101812'/%3E%3Cpath d='M16 5v22M9 27l7-16 7 16M11 17h10' fill='none' stroke='%23bfe69a' stroke-width='2'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">⌁</div><div><span class="brand-kicker">FIELD STATION 07</span><strong>MIDNIGHT<br>SIGNAL</strong></div></div>
-      <div class="station-label"><span class="live-dot"></span> SUMATRA · 02° 34′ S</div>
-      <div class="side-section-label">TONIGHT'S LOG</div>
-      <div class="night-progress" id="nightProgress"></div>
-      <div class="side-section-label equipment-label">STATION STATUS</div>
-      <div class="equipment-list" id="equipmentList"></div>
-      <div class="sidebar-bottom"><div class="manual-icon">▤</div><div><b>KEEPER'S MANUAL</b><span>Notes from A. Rahman</span></div><button id="manualButton" class="icon-button" aria-label="Open keeper manual">↗</button></div>
-      <div class="build-tag">KEEP THE SIGNAL ALIVE <span>✦</span></div>
+  <div id="game">
+    <canvas id="world" aria-label="Playable 3D-style view of the field station"></canvas>
+
+    <header class="hud-top">
+      <div class="brand-block">
+        <span class="brand-rune">⌁</span>
+        <div><small>FIELD STATION 07</small><strong>MIDNIGHT SIGNAL</strong></div>
+      </div>
+      <div class="watch-block">
+        <div><span class="live-dot"></span><small>LOCAL WATCH</small></div>
+        <strong id="clock">23:48</strong>
+      </div>
+    </header>
+
+    <aside class="objective-card">
+      <div class="objective-kicker"><span>ACTIVE DIRECTIVE</span><b id="nightLabel">NIGHT 01</b></div>
+      <h1 id="objectiveTitle">Bring the station online</h1>
+      <p id="objectiveText">Check the generator, align the dish, repair the relay, then listen to the carrier.</p>
+      <div class="objective-progress"><span id="objectiveCount">0 / 4</span><div><i id="objectiveBar"></i></div></div>
     </aside>
 
-    <main class="main-area">
-      <header class="topbar">
-        <div class="top-left"><span class="eyebrow" id="chapterLabel">NIGHT 01 / 03</span><span class="top-divider"></span><span class="weather"><span class="rain-icon">⛈</span> MONSOON WATCH <span class="weather-temp">24°</span></span></div>
-        <div class="top-right"><div class="clock"><span class="clock-dot"></span><span id="clock">23:48</span><small>LOCAL TIME</small></div><button class="sound-button" id="soundButton" aria-label="Toggle ambient sound">♫ <span>AMBIENCE</span></button></div>
-      </header>
-      <div class="content-wrap">
-        <section class="hero-scene" id="heroScene">
-          <canvas id="sceneCanvas" aria-label="A radio tower in a moonlit rainforest"></canvas>
-          <div class="scene-scrim"></div>
-          <div class="scene-topline"><span class="scene-chip"><span class="live-dot"></span> STATION ONLINE</span><span class="scene-location">GUNUNG LEUSER · 1,840 M</span></div>
-          <div class="scene-caption"><span class="eyebrow">A LONG WAY FROM ANYWHERE</span><h1>The forest is<br><em>listening.</em></h1><p id="sceneMessage">Wind is rising over the canopy. Run your nightly checks.</p></div>
-          <div class="signal-readout"><span class="signal-label">CARRIER SIGNAL</span><div class="signal-value"><strong id="signalPercent">—</strong><small>%</small><span class="signal-bars" id="signalBars"></span></div><div class="signal-track"><span id="signalFill"></span></div><span class="signal-foot" id="signalFoot">AWAITING CALIBRATION</span></div>
-          <div class="scene-coordinate">N 02°34′18″ &nbsp; E 098°12′41″</div>
-        </section>
+    <aside class="vitals">
+      <div class="vital"><span>BODY</span><div><i id="bodyBar"></i></div><b id="bodyValue">100</b></div>
+      <div class="vital"><span>POWER</span><div><i id="powerBar"></i></div><b id="powerValue">72</b></div>
+    </aside>
 
-        <section class="mission-heading"><div><div class="section-overline"><span class="overline-dash"></span> NIGHTLY MAINTENANCE</div><h2 id="missionTitle">A steady hand in the storm</h2><p id="missionSubtitle">Four checks stand between the valley and silence.</p></div><div class="mission-count"><span id="checksDone">0</span><i>/</i><span>4</span><small>CHECKS COMPLETE</small></div></section>
+    <div class="minimap-shell"><canvas id="minimap" width="150" height="150" aria-label="Station minimap"></canvas><div class="map-coord">2°34′S<br>98°12′E</div></div>
 
-        <nav class="task-tabs" aria-label="Station systems">
-          <button class="task-tab active" data-panel="power"><span class="tab-icon">ϟ</span><span class="tab-copy"><b>Power</b><small>GENERATOR</small></span><span class="tab-state" id="statePower">IN PROGRESS</span></button>
-          <button class="task-tab" data-panel="dish"><span class="tab-icon">⌖</span><span class="tab-copy"><b>Alignment</b><small>ANTENNA ARRAY</small></span><span class="tab-state" id="stateDish">PENDING</span></button>
-          <button class="task-tab" data-panel="board"><span class="tab-icon">⌁</span><span class="tab-copy"><b>Repair</b><small>RELAY BOARD</small></span><span class="tab-state" id="stateBoard">PENDING</span></button>
-          <button class="task-tab" data-panel="radio"><span class="tab-icon">◉</span><span class="tab-copy"><b>Listening post</b><small>SHORTWAVE RADIO</small></span><span class="tab-state" id="stateRadio">PENDING</span></button>
-        </nav>
+    <div class="interaction" id="interaction">
+      <div class="keycap">E</div>
+      <div><small id="interactionType">INSPECT</small><strong id="interactionName">Generator</strong></div>
+    </div>
 
-        <section class="workbench" id="workbench" aria-live="polite"></section>
-        <footer class="footer-note"><span>FIELD STATION 07 <i>·</i> ACEH PROVINCE</span><span>ANALOG SYSTEMS <i>·</i> KEEP YOUR EARS OPEN</span></footer>
-      </div>
-    </main>
+    <div class="status-strip">
+      <div><span>WEATHER</span><strong id="weatherText">MONSOON · 24°</strong></div>
+      <div><span>SIGNAL</span><strong id="signalText">NO CARRIER</strong></div>
+      <button id="mapButton" aria-label="Open station journal">JOURNAL</button>
+      <button id="soundButton" aria-label="Toggle ambience">SOUND</button>
+    </div>
+
+    <div class="joystick hidden" id="joystick"><div class="joystick-knob" id="joystickKnob"></div></div>
+    <button class="mobile-action hidden" id="mobileAction">E</button>
+
+    <div class="modal-backdrop hidden" id="modalBackdrop">
+      <section class="job-modal" id="jobModal" role="dialog" aria-modal="true"></section>
+    </div>
+
+    <div class="journal-backdrop hidden" id="journalBackdrop">
+      <section class="journal">
+        <header><div><small>KEEPER'S RECORD</small><h2>Station journal</h2></div><button id="closeJournal" aria-label="Close journal">CLOSE ×</button></header>
+        <div id="journalEntries" class="journal-entries"></div>
+        <footer><button id="restartButton">RESTART WATCH</button></footer>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
   </div>
-  <div class="toast" id="toast" role="status"></div>
-  <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modal"></div></div>
   <script src="game.js"></script>
 </body>
 </html>
