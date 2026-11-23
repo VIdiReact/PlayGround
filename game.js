@@ -1,80 +1,199 @@
-(() => {
-  const nights = [
-    {heading:218,elevation:34,load:13,initial:[3,2,3,2],sequence:['A','C','B'],frequency:7.42,band:'HIKER DISTRESS',source:'Unknown hiker · foothill trail',quote:'“...is the tower still manned? We can see a light through the rain. We’re at the old bridge.”',clue:'A weak carrier repeats at 7.42 MHz. The signal is coming from the ridge trail.',choices:[['Guide them to the ranger shelter','Give a bearing, not the tower coordinates.'],['Stay silent and log the call','The manual says never reveal the station to strangers.']],hint:'Keep the needle at 218° and the dish elevation at 34°.'},
-    {heading:264,elevation:27,load:15,initial:[2,3,2,2],sequence:['B','D','A'],frequency:8.16,band:'VALLEY RELAY',source:'Bukit village relay · weak carrier',quote:'“...Rahman? It’s your sister. The river is rising. Tell me where you are.”',clue:'A familiar voice rides the repeater at 8.16 MHz. There is no sister listed in the station log.',choices:[['Warn the village of the flood','Send a general warning over the open channel.'],['Answer with your name','Ask who is speaking and how they know Rahman.']],hint:'The old keeper wrote: a voice that knows your name is not always a person.'},
-    {heading:193,elevation:41,load:12,initial:[3,2,2,2],sequence:['D','C','A'],frequency:6.88,band:'UNLISTED CARRIER',source:'Origin unknown · bearing unstable',quote:'“...keeper at station seven. If the light is on, I never left.”',clue:'A voice from the closed northern repeater is centered on 6.88 MHz. Its call sign belongs to this tower.',choices:[['Reply with the shutdown phrase','Use Rahman’s last entry. Do not give the voice a name.'],['Cut power to the receiver','Some things are safer left unheard.']],hint:'Some frequencies have a memory. Aim carefully before answering.'}
-  ];
-  const labels={A:'C12',B:'R4',C:'D7',D:'Q2'};
-  const state={night:0,done:[{power:false,dish:false,board:false,radio:false},{power:false,dish:false,board:false,radio:false},{power:false,dish:false,board:false,radio:false}],power:null,heading:0,elevation:0,soldered:[],radioDial:7.00,signal:0,decision:null,quality:0,started:false,muted:true,log:[],ending:false};
-  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-  const night=()=>nights[state.night], completed=()=>Object.values(state.done[state.night]).filter(Boolean).length;
-  const save=()=>{try{localStorage.setItem('midnight-signal-save',JSON.stringify({night:state.night,done:state.done,decision:state.decision,log:state.log,ending:state.ending}))}catch(_){}};
-  const load=()=>{try{const d=JSON.parse(localStorage.getItem('midnight-signal-save'));if(d&&Array.isArray(d.done)&&d.done.length===3){state.night=Math.min(2,d.night||0);state.done=d.done;state.decision=d.decision||null;state.log=d.log||[];state.ending=!!d.ending}}catch(_){}};
-  const toast=(msg)=>{const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2300)};
-  function updateHUD(){
-    const n=night(),done=state.done[state.night];
-    $('#chapterLabel').textContent=`NIGHT 0${state.night+1} / 03`;
-    $('#missionTitle').textContent=['A steady hand in the storm','A voice in the rain','The last transmission'][state.night];
-    $('#missionSubtitle').textContent=state.ending?'The station is quiet now. Your log will remember.':completed()===4?'All systems checked. Close the log when you are ready.':`${4-completed()} checks stand between the valley and silence.`;
-    $('#checksDone').textContent=completed();
-    $('#sceneMessage').textContent=state.ending?'Dawn gathers over the canopy. The carrier holds.':state.night===0?'Wind is rising over the canopy. Run your nightly checks.':state.night===1?'Rain drums against the dish. Something is riding the repeater.':'The storm has passed, but a signal remains on the line.';
-    $('#signalPercent').textContent=state.signal?state.signal:'—';$('#signalFill').style.width=`${state.signal}%`;
-    $('#signalFoot').textContent=state.ending?'TRANSMISSION LOGGED':done.radio?'CARRIER STABLE':done.dish?'AWAITING TRANSMISSION':'AWAITING CALIBRATION';
-    const bars=$('#signalBars');bars.innerHTML='';for(let i=0;i<5;i++){const b=document.createElement('i');b.style.height=`${5+i*3}px`;b.style.opacity=state.signal>i*20?.95:.2;bars.append(b)}
-    const names=['Night 01 · First watch','Night 02 · The repeater','Night 03 · Last light'];$('#nightProgress').innerHTML=names.map((x,i)=>`<div class="night-item ${i===state.night?'current':i<state.night||state.ending?'done':''}"><span class="night-marker"></span><span>${x}<small class="night-name">${i===state.night?'IN PROGRESS':i<state.night||state.ending?'LOGGED':'UPCOMING'}</small></span></div>`).join('');
-    const eq=[['ϟ','Diesel generator',done.power?'STABLE':'CHECK'],['⌖','Dish alignment',done.dish?'LOCKED':'OFF AXIS'],['⌁','Relay board',done.board?'REPAIRED':'FAULT'],['◉','Shortwave receiver',done.radio?'LOGGED':'CARRIER']];
-    $('#equipmentList').innerHTML=eq.map((e,i)=>`<div class="equip-row"><span class="equip-icon">${e[0]}</span><span>${e[1]}</span><small class="${done[['power','dish','board','radio'][i]]?'good':'warn'}">${e[2]}</small></div>`).join('');
-    $$('.task-tab').forEach(t=>{let key=t.dataset.panel;t.classList.toggle('complete',done[key]);$('#state'+key[0].toUpperCase()+key.slice(1)).textContent=done[key]?'CHECKED':'PENDING';if(t.classList.contains('active'))$('#state'+key[0].toUpperCase()+key.slice(1)).textContent=done[key]?'CHECKED':'IN PROGRESS'});
-  }
-  function render(){updateHUD();renderPanel($('.task-tab.active').dataset.panel);}
-  function head(kicker,title,desc,tag){return `<div class="panel-head"><div><div class="panel-kicker">${kicker}</div><h3>${title}</h3><p>${desc}</p></div><span class="micro-tag">${tag}</span></div>`}
-  function renderPanel(which){const box=$('#workbench'),n=night(),done=state.done[state.night]; if(state.ending){box.innerHTML=`<div class="end-panel"><div class="end-glyph">⌁</div><div class="panel-kicker">FIELD LOG · COMPLETE</div><h3>The signal carries on.</h3><p>${state.log.join(' ')||'The rain has eased. Your final entry is waiting in the keeper’s manual.'} The sun is rising over Gunung Leuser. Whatever spoke through the radio has gone quiet—for now.</p><button class="secondary-button" id="restartButton">START A NEW WATCH ↺</button></div>`;$('#restartButton').onclick=restart;return}
-    if(which==='power'){
-      const p=state.power||[...n.initial];state.power=p;const sum=p.reduce((a,b)=>a+b,0),min=n.load-1,max=n.load+1,valid=sum>=min&&sum<=max;
-      box.innerHTML=head('01 · DISTRIBUTION PANEL','Balance the generator load',`Keep essential circuits within the green band. The load target is ${n.load} units; stable range ${min}–${max}.`,'DIESEL · 1800 RPM')+`<div class="power-layout"><div class="load-list">${[['⟡','Radio & repeater'],['⌖','Antenna motor'],['◌','Beacon lamp'],['⌂','Heater & cabin']].map((x,i)=>`<label class="load-row"><span class="load-icon">${x[0]}</span><span>${x[1]}</span><output id="loadOut${i}">${p[i]}</output><input type="range" min="0" max="5" step="1" value="${p[i]}" data-load="${i}" aria-label="${x[1]} load"></label>`).join('')}</div><div class="power-meter"><div class="meter-title"><span>TOTAL DRAW</span><span>UNITS / H</span></div><div class="meter-value"><span id="drawValue">${sum}</span><small> / ${n.load}</small></div><div class="meter-track"><div class="target-band" style="left:${min/20*100}%;width:${(max-min)/20*100}%"></div><span id="drawFill" style="width:${sum/20*100}%"></span></div><div class="meter-hints"><span>0 · IDLE</span><span>20 · OVERLOAD</span></div><div class="balance-status" id="balanceStatus">${valid?'LOAD IS STABLE — READY TO ENGAGE':'ADJUST THE BUS — KEEP THE NEEDLE IN THE GREEN'}</div><div class="action-row"><button class="primary-button" id="engagePower" ${done.power?'disabled':''}>${done.power?'GENERATOR STABLE':'ENGAGE DISTRIBUTION ↗'}</button></div></div></div>`;
-      box.querySelectorAll('[data-load]').forEach(input=>input.oninput=()=>{state.power[+input.dataset.load]=+input.value;$('#loadOut'+input.dataset.load).textContent=input.value;const total=state.power.reduce((a,b)=>a+b,0),ok=total>=min&&total<=max;$('#drawValue').textContent=total;$('#drawFill').style.width=`${total/20*100}%`;$('#balanceStatus').textContent=ok?'LOAD IS STABLE — READY TO ENGAGE':'ADJUST THE BUS — KEEP THE NEEDLE IN THE GREEN';$('#engagePower').disabled=!ok||done.power});
-      $('#engagePower').onclick=()=>{if(!valid)return;mark('power',`Generator engaged at ${sum} load units.`);state.signal=Math.max(state.signal,28);toast('Generator stable. The tower has power.');};return
-    }
-    if(which==='dish'){
-      const angle=state.heading,el=state.elevation;box.innerHTML=head('02 · OUTDOOR ARRAY','Find the carrier bearing',`Compass bearing ${n.heading}°. Dish elevation ${n.elevation}°. Use the scope to bring the carrier into focus.`,'WIND GUSTS · 38 KM/H')+`<div class="dish-layout"><div class="dish-controls"><label><span class="control-label"><span>AZIMUTH · COMPASS BEARING</span><output id="headingOut">${angle}°</output></span><input id="headingRange" class="dial-range" type="range" min="0" max="359" value="${angle}"></label><label><span class="control-label"><span>DISH ELEVATION</span><output id="elevationOut">${el}°</output></span><input id="elevationRange" class="dial-range" type="range" min="0" max="65" value="${el}"></label><div class="compass-wrap"><div class="compass"><span class="compass-label n">N</span><span class="compass-label s">S</span><span class="compass-label e">E</span><span class="compass-label w">W</span><span class="compass-needle" id="needle"></span></div><div class="compass-readout">BEARING <span id="compassAngle">${angle}°</span><br>WIND SHIFT <span style="color:#e6b96f">+2°</span><br>REFERENCE <span>${n.heading}°</span></div></div><div class="action-row"><button class="primary-button" id="lockDish" ${done.dish?'disabled':''}>${done.dish?'CARRIER LOCKED':'LOCK CARRIER ↗'}</button></div></div><div class="scope-card"><div class="scope-title"><span>MANUAL OSCILLOSCOPE</span><span>CH 02</span></div><canvas class="scope" id="scopeCanvas" width="360" height="100"></canvas><div class="scope-readout" id="scopeReadout">${scopeMessage()}</div></div></div>`;
-      const sync=()=>{state.heading=+$('#headingRange').value;state.elevation=+$('#elevationRange').value;$('#headingOut').textContent=state.heading+'°';$('#elevationOut').textContent=state.elevation+'°';$('#compassAngle').textContent=state.heading+'°';$('#needle').style.transform=`translateX(-50%) rotate(${state.heading}deg)`;drawScope()};$('#headingRange').oninput=sync;$('#elevationRange').oninput=sync;drawScope();$('#lockDish').onclick=()=>{if(angleDiff(state.heading,n.heading)<=3&&Math.abs(state.elevation-n.elevation)<=2){mark('dish',`Dish locked at ${state.heading}° / ${state.elevation}°.`);state.signal=Math.max(state.signal,61);toast('Carrier acquired. The scope is steady.')}else{$('#scopeReadout').textContent=`CARRIER LOST · ${angleDiff(state.heading,n.heading)>3?'AZIMUTH':'ELEVATION'} OUT OF PHASE`;toast('Not quite. Follow the scope and try again.')}};return
-    }
-    if(which==='board'){
-      const seq=n.sequence;box.innerHTML=head('03 · CABIN BENCH','Bridge the damaged relay',`Lightning took out the relay. The manual's trace order: ${seq.join(' → ')}. Solder each pad in sequence.`,'POWER ISOLATED')+`<div class="board-layout"><div><div class="circuit-board"><div class="board-grid"></div><span class="board-trace trace-a"></span><span class="board-trace trace-b"></span><span class="board-trace trace-c"></span>${Object.keys(labels).map(k=>`<button class="pad pad-${k.toLowerCase()} ${state.soldered.includes(k)?'soldered':''}" data-pad="${k}" aria-label="Solder relay pad ${k}">${labels[k]}</button>`).join('')}</div><div class="board-legend"><span><i class="legend-swatch"></i>UNSOLDERED CONTACT</span><span>◉ RELAY TRACE</span></div></div><div class="board-instructions"><div class="panel-kicker">FOLLOW THE COPPER TRACE</div><p>Begin at the <strong>lightning return</strong>, cross the regulator, then bridge the relay contact. One wrong connection and the fuse goes.</p><div class="solder-sequence">${seq.map((k,i)=>`<span class="seq-node ${state.soldered.includes(k)?'done':''} ${!state.soldered.includes(k)&&state.soldered.length===i?'active':''}">${labels[k]}</span>`).join('')}</div><div id="solderHint" class="balance-status">${done.board?'RELAY CONTINUITY RESTORED':state.soldered.length?`CONTACT ${state.soldered.length} OF 3 · KEEP GOING`:'SELECT THE FIRST CONTACT'}</div><div class="action-row"><button class="primary-button" id="resetBoard" ${done.board?'disabled':''}>RESET TRACE ↺</button></div></div></div>`;
-      box.querySelectorAll('[data-pad]').forEach(b=>b.onclick=()=>{if(done.board)return;const pad=b.dataset.pad,idx=state.soldered.length;if(seq[idx]===pad){state.soldered.push(pad);b.classList.add('soldered');const hint=$('#solderHint');if(idx===2){mark('board','Relay board repaired and continuity restored.');state.signal=Math.max(state.signal,76);hint.textContent='RELAY CONTINUITY RESTORED';toast('Clean solder. The relay is back online.')}else{hint.textContent=`CONTACT ${idx+1} OF 3 · TRACE CONTINUES`;const next=$(`[data-pad="${seq[idx+1]}"]`);if(next)next.focus()};$('.solder-sequence').innerHTML=seq.map((k,i)=>`<span class="seq-node ${state.soldered.includes(k)?'done':''} ${!state.soldered.includes(k)&&state.soldered.length===i?'active':''}">${labels[k]}</span>`).join('')}else{b.classList.add('wrong');setTimeout(()=>b.classList.remove('wrong'),500);$('#solderHint').textContent='NO CONTINUITY · FOLLOW THE MANUAL TRACE';toast('Wrong contact. Nothing damaged—follow the sequence.')}});
-      $('#resetBoard').onclick=()=>{state.soldered=[];renderPanel('board')};return
-    }
-    renderRadio(box,n,done);
-  }
-  function angleDiff(a,b){return Math.abs(((a-b+540)%360)-180)}
-  function scopeMessage(){if(!state.heading)return'NO CARRIER · SWEEP THE HORIZON';const d=angleDiff(state.heading,night().heading),e=Math.abs(state.elevation-night().elevation);return d<=3&&e<=2?'CARRIER PHASE-LOCKED · SIGNAL CLEAN':`CARRIER ${d>3?'DRIFTING':'WEAK'} · ADJUST THE DISH`}
-  function drawScope(){const c=$('#scopeCanvas');if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.strokeStyle='#263a2d';ctx.lineWidth=1;for(let x=0;x<w;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}const d=angleDiff(state.heading,night().heading),e=Math.abs(state.elevation-night().elevation),strength=Math.max(.08,1-d/45-e/18);ctx.beginPath();ctx.strokeStyle='#b9e28e';ctx.shadowColor='#9fdc83';ctx.shadowBlur=6;ctx.lineWidth=2;for(let x=0;x<w;x++){let phase=x/w*Math.PI*10;let noise=(Math.sin(x*1.9)+Math.sin(x*.31)*.8)*((1-strength)*7);let amp=(2+strength*29)*Math.exp(-Math.pow((x-w*.5)/(w*(.04+(.2*(1-strength)))),2));let y=h/2+Math.sin(phase)*amp+noise;if(x===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle='#9abd82';ctx.font='9px monospace';ctx.fillText('0.2 ms / DIV',7,h-6);if($('#scopeReadout'))$('#scopeReadout').textContent=scopeMessage()}
-  function renderRadio(box,n,done){const tuned=Math.abs(state.radioDial-n.frequency)<=.02;box.innerHTML=head('04 · SHORTWAVE RECEIVER','A voice beneath the static',`The receiver caught an unregistered transmission. Tune the carrier, listen, then decide what the manual allows.`,'RX · SSB')+`<div class="radio-layout"><div><div class="radio-screen"><div class="radio-frequency" id="freqDisplay">${state.radioDial.toFixed(2)} <span style="font-size:12px">MHz</span></div><div class="radio-band">${tuned?'CARRIER LOCKED · '+n.band:'SWEEPING · '+n.band}</div><canvas class="waveform" id="waveCanvas" width="220" height="60"></canvas></div><div class="dial-row"><span style="font:8px var(--mono);color:#839283">6.00</span><input type="range" id="frequencyDial" min="600" max="900" step="1" value="${Math.round(state.radioDial*100)}" aria-label="Tune shortwave frequency"><output id="freqOut">${state.radioDial.toFixed(2)} MHz</output></div><div class="frequency-markers"><span>SHORTWAVE · 6–9 MHz</span><span>STEP 0.01</span></div><div class="tune-state" id="tuneState">${done.radio?'DECISION LOGGED':tuned?'◇ CARRIER FOUND · LISTENING CLEARLY':'◇ '+n.clue}</div></div><div class="transmission-card"><div class="transmission-label">${tuned?'INCOMING TRANSMISSION':n.source.toUpperCase()}</div><blockquote>${tuned?n.quote:'“... — — ... [STATIC] ... — — ...”'}</blockquote><p>${tuned?'The voice fades. The keeper’s manual is open beside the receiver.':'Tune the receiver to separate the voice from the rain.'}</p>${done.radio?`<div class="balance-status">${state.decision||'TRANSMISSION LOGGED'}</div>`:''}</div></div>${tuned&&!done.radio?`<div class="choice-list">${n.choices.map((c,i)=>`<button class="choice-card" data-choice="${i}"><b>${c[0]}</b><span>${c[1]}</span></button>`).join('')}</div>`:''}`;
-    $('#frequencyDial').oninput=e=>{state.radioDial=+e.target.value/100;renderPanel('radio')};drawWave(tuned);box.querySelectorAll('[data-choice]').forEach(btn=>btn.onclick=()=>{const choice=+btn.dataset.choice;state.decision=n.choices[choice][0];const notes=[['You sent a bearing to the ranger shelter. At dawn, a search party found two hikers beneath the old bridge.','The ridge remained quiet until morning. In the log, you note two sets of footprints by the station gate.'],['A warning went out on the village band. No one answered, but the river gauge fell by morning.','You gave the voice a name. It repeated it back in Rahman’s voice, then the line went dead.'],['The shutdown phrase echoed once from the northern repeater. The carrier died at 03:17.','The receiver went dark. At dawn, a fresh line appeared in the log: “I never left.”']];state.log.push(notes[state.night][choice]);mark('radio','Transmission decision recorded.');toast('Decision logged. The night is yours to close.');renderPanel('radio')});
-  }
-  function drawWave(locked){const c=$('#waveCanvas');if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.strokeStyle=locked?'#b9e28e':'#8ba784';ctx.lineWidth=1.5;ctx.beginPath();for(let x=0;x<w;x++){const y=h/2+Math.sin(x*.16)*((locked?8:3)+Math.sin(x*.75)*(locked?4:9))+Math.sin(x*.04)*2;if(!x)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke()}
-  function mark(key,message){state.done[state.night][key]=true;save();render()}
-  $$('.task-tab').forEach(t=>t.onclick=()=>{$$('.task-tab').forEach(a=>a.classList.remove('active'));t.classList.add('active');renderPanel(t.dataset.panel)});
-  $('#manualButton').onclick=()=>showManual();
-  function showManual(){const n=night();$('#modal').innerHTML=`<h3>Keeper’s field notes</h3><p>Written in a small, careful hand. The corners smell faintly of kerosene.</p><div class="manual-quote">“If the carrier wanders, trust the compass over the weather. Keep the beacon and receiver fed before the heater. Copper remembers the path of a strike.”</div><p><strong style="color:#d8e6d0">Tonight:</strong> ${n.hint}</p><p><strong style="color:#d8e6d0">On the voice:</strong> ${state.night===0?'A distress call is still a person. Send a bearing, never the station’s location.':state.night===1?'If a voice knows your name, warn the valley—but do not answer it directly.':'Use the shutdown phrase only. Never give the repeater your name.'}</p><div class="modal-actions"><button class="primary-button" id="closeManual">BACK TO THE WATCH</button></div>`;$('#modalBackdrop').classList.remove('hidden');$('#closeManual').onclick=()=>$('#modalBackdrop').classList.add('hidden')}
-  $('#modalBackdrop').onclick=e=>{if(e.target.id==='modalBackdrop')e.currentTarget.classList.add('hidden')};
-  function nextNight(){if(completed()!==4)return;if(state.night===2){state.ending=true;state.signal=100;save();render();return}state.night++;state.power=null;state.heading=0;state.elevation=0;state.soldered=[];state.radioDial=+(night().frequency-.18).toFixed(2);state.decision=null;state.signal=Math.min(92,state.signal+6);save();render();toast('New watch started. Check the incoming carrier.');}
-  function restart(){localStorage.removeItem('midnight-signal-save');state.night=0;state.done=[{power:false,dish:false,board:false,radio:false},{power:false,dish:false,board:false,radio:false},{power:false,dish:false,board:false,radio:false}];state.power=null;state.heading=0;state.elevation=0;state.soldered=[];state.radioDial=7;state.signal=0;state.decision=null;state.log=[];state.ending=false;$('.task-tab[data-panel="power"]').click();render()}
-  // Closing a night is a deliberate action, shown once every system is checked.
-  const closeLog=document.createElement('button');closeLog.className='primary-button hidden';closeLog.id='closeLog';closeLog.textContent='CLOSE THE LOG · BEGIN NEXT WATCH ↗';$('#workbench').after(closeLog);closeLog.onclick=nextNight;
-  const originalUpdate=updateHUD;
-  function updateClose(){closeLog.classList.toggle('hidden',completed()!==4||state.ending);closeLog.style.display=completed()===4&&!state.ending?'block':'none';closeLog.style.margin='12px 0 0 auto'}
-  const originalRender=render;render=function(){originalRender();updateClose()};
-  $('#soundButton').onclick=()=>{state.muted=!state.muted;$('#soundButton').innerHTML=state.muted?'♫ <span>AMBIENCE</span>':'♫ <span>SOUND OFF</span>';toast(state.muted?'Ambient sound enabled':'Ambient sound muted')};
-  function init(){load();state.radioDial=night().frequency-.18;render();setInterval(()=>{let d=new Date();let mins=(48+Math.floor((Date.now()-startTime)/60000))%60;let hour=(23+Math.floor((48+Math.floor((Date.now()-startTime)/60000))/60))%24;$('#clock').textContent=`${String(hour).padStart(2,'0')}:${String(mins).padStart(2,'0')}`},1000);drawScene();}
-  const startTime=Date.now();
-  function drawScene(){const c=$('#sceneCanvas'),ctx=c.getContext('2d');let w=c.clientWidth,h=c.clientHeight,dpr=Math.min(devicePixelRatio||1,1.5);if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);const t=Date.now()/1000;ctx.clearRect(0,0,w,h);let sky=ctx.createLinearGradient(0,0,0,h);sky.addColorStop(0,'#1b3338');sky.addColorStop(.58,'#263b31');sky.addColorStop(1,'#17251e');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);ctx.fillStyle='#d5d9bb';ctx.globalAlpha=.72;ctx.beginPath();ctx.arc(w*.76,h*.23,18,0,7);ctx.fill();ctx.globalAlpha=1;for(let i=0;i<38;i++){const x=((i*89+33)%Math.max(w,1)),y=(i*47%Math.max(h*.58,1));ctx.fillStyle=i%4?'#d8e6ce':'#a9d57f';ctx.globalAlpha=.22+(i%3)*.1;ctx.fillRect(x,y,1,1)}ctx.globalAlpha=1;
-    const hill=(y,color,seed)=>{ctx.beginPath();ctx.moveTo(0,h);for(let x=0;x<=w+10;x+=10){const yy=y+Math.sin(x*.014+seed)*9+Math.sin(x*.036+seed*3)*6;ctx.lineTo(x,yy)}ctx.lineTo(w,h);ctx.closePath();ctx.fillStyle=color;ctx.fill()};hill(h*.57,'#22372c',1);hill(h*.67,'#1a2c23',3);hill(h*.77,'#14231c',7);
-    // tower mast and climbing rungs
-    const tx=w*.69,base=h*.83,top=h*.25;ctx.strokeStyle='#91a292';ctx.lineWidth=1.2;ctx.globalAlpha=.8;ctx.beginPath();ctx.moveTo(tx-26,base);ctx.lineTo(tx,top);ctx.lineTo(tx+27,base);ctx.moveTo(tx-15,base);ctx.lineTo(tx+15,base);ctx.stroke();for(let y=top+8;y<base;y+=13){let p=(y-top)/(base-top);let spread=2+26*p;ctx.beginPath();ctx.moveTo(tx-spread,y);ctx.lineTo(tx+spread,y);ctx.stroke();ctx.beginPath();ctx.moveTo(tx,y);ctx.lineTo(tx,y+11);ctx.stroke()}ctx.beginPath();ctx.moveTo(tx,top);ctx.lineTo(tx-10,top-12);ctx.lineTo(tx+13,top-19);ctx.stroke();ctx.beginPath();ctx.ellipse(tx+14,top-20,12,4,-.3,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#e49c62';ctx.shadowColor='#e8895c';ctx.shadowBlur=16;ctx.beginPath();ctx.arc(tx,top,3,0,7);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
-    // rainforest silhouettes
-    for(let i=0;i<18;i++){let x=i/17*w;let hh=26+(i*37%55);ctx.fillStyle=i%2?'#102019':'#14251b';ctx.fillRect(x,h-hh*.42,4,hh);ctx.beginPath();ctx.moveTo(x-17,h-hh*.4);ctx.lineTo(x+2,h-hh);ctx.lineTo(x+20,h-hh*.4);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(x-14,h-hh*.56);ctx.lineTo(x+2,h-hh*.92);ctx.lineTo(x+17,h-hh*.56);ctx.closePath();ctx.fill()}
-    // rain strokes
-    ctx.strokeStyle='#b6d3bf';ctx.lineWidth=.55;ctx.globalAlpha=.13;for(let i=0;i<110;i++){let x=(i*67+t*35)%w,y=(i*41+t*98)%(h+15);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-4,y+9);ctx.stroke()}ctx.globalAlpha=1;requestAnimationFrame(drawScene)}
-  init();
-})();
+// Midnight Signal: Jungle Tower — 3D-style open-world management RPG
+const $=(q)=>document.querySelector(q);
+const SAVE='midnight-signal-save';
+
+const stations={
+generator:{name:'Generator',type:'BALANCE LOAD',x:-.42,y:.25,done:false},
+dish:{name:'Dishes & Mast',type:'ALIGN ANTENNA',x:.55,y:-.05,done:false},
+relay:{name:'Relay Board',type:'SOLDER CIRCUIT',x:.2,y:.55,done:false},
+radio:{name:'Radio Shack',type:'TUNE TRANSMISSION',x:-.05,y:-.46,done:false}
+};
+
+let state={night:1,completed:{},load:[42,28,18,12],dishAz:118,dishEl:31,relaySteps:[],radioDial:52,ending:null,muted:false,entries:[]};
+let player={x:-.10,y:.12,a:0,walk:0};
+let keys={};let cameraShake=0;let nearest=null;let toastTimer=0;
+let rain=[];let fireflies=[];
+
+try{const saved=JSON.parse(localStorage.getItem(SAVE)||'null');if(saved)state={...state,...saved};}catch(e){}
+Object.keys(stations).forEach(k=>stations[k].done=!!state.completed[k]);
+
+for(let i=0;i<85;i++)rain.push({x:Math.random(),y:Math.random(),z:Math.random()});
+for(let i=0;i<28;i++)fireflies.push({x:Math.random(),y:Math.random(),p:Math.random()*6});
+
+function save(){localStorage.setItem(SAVE,JSON.stringify(state));}
+function toast(s){const el=$('#toast');el.textContent=s;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200);}
+
+function worldPoint(wx,wy,c){
+  const w=c.width,h=c.height;
+  const scale=Math.min(w/1100,h/680)*1.28;
+  const cx=w*.51,cy=h*.58;
+  return {x:cx+(wx-wy)*220*scale,y:cy+(wx+wy)*105*scale};
+}
+
+function drawWorld(){
+  const c=$('#world'),ctx=c.getContext('2d');
+  const dpr=Math.min(devicePixelRatio||1,2);const w=c.clientWidth,h=c.clientHeight;
+  if(c.width!==w*dpr||c.height!==h*dpr){c.width=w*dpr;c.height=h*dpr;}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const horizon=h*.40;
+  let sky=ctx.createLinearGradient(0,0,0,horizon+180);sky.addColorStop(0,'#081310');sky.addColorStop(.7,'#1b3226');sky.addColorStop(1,'#42604d');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+
+  // distant jungle silhouettes
+  ctx.fillStyle='#09130f';
+  for(let i=-40;i<w+60;i+=31){const hh=90+((i*17)%70);ctx.beginPath();ctx.moveTo(i,horizon+30);ctx.lineTo(i+18,horizon-hh*.25);ctx.lineTo(i+36,horizon+30);ctx.fill();}
+  ctx.fillStyle='#13271d';
+  for(let i=-20;i<w+50;i+=23){const hh=55+((i*31)%45);ctx.beginPath();ctx.moveTo(i,horizon+40);ctx.lineTo(i+12,horizon-hh);ctx.lineTo(i+25,horizon+40);ctx.fill();}
+
+  // moon and mist
+  ctx.fillStyle='rgba(205,223,198,.12)';ctx.beginPath();ctx.arc(w*.78,h*.18,38,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(220,229,205,.8)';ctx.beginPath();ctx.arc(w*.78,h*.18,16,0,Math.PI*2);ctx.fill();
+
+  // forest floor
+  ctx.save();ctx.beginPath();ctx.moveTo(0,h*.37);ctx.lineTo(w,h*.37);ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.clip();
+  const ground=ctx.createLinearGradient(0,h*.38,0,h);ground.addColorStop(0,'#2b4935');ground.addColorStop(.55,'#1b3325');ground.addColorStop(1,'#0d1b13');ctx.fillStyle=ground;ctx.fillRect(0,h*.37,w,h*.63);
+
+  // isometric ground tiles
+  const scale=Math.min(w/1100,h/680)*1.28;const cx=w*.51,cy=h*.58;
+  ctx.strokeStyle='rgba(131,160,132,.08)';ctx.lineWidth=1;
+  for(let i=-7;i<=7;i++){ctx.beginPath();let a=worldPoint(i,-5,c),b=worldPoint(i,5,c);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();let d=worldPoint(-5,i,c),e=worldPoint(5,i,c);ctx.moveTo(d.x,d.y);ctx.lineTo(e.x,e.y);ctx.stroke();}
+
+  // station pad
+  ctx.fillStyle='rgba(23,31,25,.82)';ctx.beginPath();
+  let p=worldPoint(-.78,-.75,c),q=worldPoint(.78,-.75,c),r=worldPoint(.78,.75,c),s=worldPoint(-.78,.75,c);
+  ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.lineTo(r.x,r.y);ctx.lineTo(s.x,s.y);ctx.closePath();ctx.fill();
+
+  // puddles and mud
+  ctx.fillStyle='rgba(105,139,130,.12)';for(let i=0;i<7;i++){let x=(i*.19-.58),y=((i*37)%90)/100-.45,b=worldPoint(x,y,c);ctx.beginPath();ctx.ellipse(b.x,b.y,35*scale,10*scale,-.15,0,Math.PI*2);ctx.fill();}
+
+  // draw sorted objects by depth
+  const objects=[];
+  objects.push({kind:'generator',depth:-.42+.25,x:-.42,y:.25});
+  objects.push({kind:'dish',depth:.55-.05,x:.55,y:-.05});
+  objects.push({kind:'relay',depth:.2+.55,x:.2,y:.55});
+  objects.push({kind:'radio',depth:-.05-.46,x:-.05,y:-.46});
+  objects.push({kind:'player',depth:player.x+player.y,x:player.x,y:player.y});
+  objects.push({kind:'tower',depth:-.02,x:.02,y:-.18});
+  objects.sort((a,b)=>a.depth-b.depth);
+  objects.forEach(o=>{if(o.kind==='player')drawPlayer(ctx,worldPoint(o.x,o.y,c),scale);else if(o.kind==='tower')drawTower(ctx,worldPoint(o.x,o.y,c),scale);else drawStation(ctx,o.kind,worldPoint(o.x,o.y,c),scale,stations[o.kind].done);});
+
+  // rain
+  ctx.strokeStyle='rgba(190,220,204,.14)';ctx.lineWidth=1;
+  rain.forEach(rn=>{let x=(rn.x*w+cameraShake)%w, y=(rn.y*h+(Date.now()/18*rn.z))%h;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-5,y+14);ctx.stroke();});
+  // fireflies
+  fireflies.forEach(f=>{let x=(f.x*w),y=h*.52+f.y*h*.35+Math.sin(Date.now()/700+f.p)*3;ctx.fillStyle=`rgba(205,232,145,${.25+.5*(.5+.5*Math.sin(Date.now()/800+f.p))})`;ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();});
+  ctx.restore();
+
+  drawMinimap();
+}
+
+function drawTower(ctx,p,s){
+  ctx.fillStyle='rgba(5,9,7,.4)';ctx.beginPath();ctx.ellipse(p.x,p.y+43*s,55*s,15*s,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#62735f';ctx.lineWidth=5*s;
+  ctx.beginPath();ctx.moveTo(p.x-34*s,p.y+50*s);ctx.lineTo(p.x,p.y-150*s);ctx.lineTo(p.x+34*s,p.y+50*s);ctx.stroke();
+  ctx.lineWidth=2*s;for(let y=-120;y<45;y+=24){ctx.beginPath();ctx.moveTo(p.x-12*s-y*.18*s,p.y+y*s);ctx.lineTo(p.x+12*s-y*.18*s,p.y+y*s);ctx.stroke();}
+  ctx.strokeStyle='#a5b990';ctx.lineWidth=1*s;ctx.beginPath();ctx.moveTo(p.x,p.y-150*s);ctx.lineTo(p.x,p.y-205*s);ctx.stroke();
+}
+
+function drawStation(ctx,kind,p,s,done){
+  ctx.save();ctx.translate(p.x,p.y);
+  ctx.fillStyle='rgba(5,8,6,.45)';ctx.beginPath();ctx.ellipse(0,18*s,38*s,11*s,0,0,Math.PI*2);ctx.fill();
+  if(kind==='generator'){ctx.fillStyle='#26352d';ctx.fillRect(-30*s,-27*s,60*s,45*s);ctx.fillStyle=done?'#86a765':'#765d43';ctx.fillRect(-23*s,-20*s,46*s,29*s);ctx.fillStyle='#111713';ctx.fillRect(-14*s,-11*s,28*s,14*s);ctx.fillStyle='#b5ca9b';ctx.fillRect(-10*s,-7*s,4*s,4*s);ctx.fillRect(6*s,-7*s,4*s,4*s);}
+  if(kind==='dish'){ctx.fillStyle='#5a685f';ctx.fillRect(-3*s,-65*s,6*s,83*s);ctx.fillStyle=done?'#a5c187':'#89958c';ctx.beginPath();ctx.ellipse(-8*s,-70*s,34*s,12*s,-.38,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#b9c8a8';ctx.lineWidth=2*s;ctx.beginPath();ctx.moveTo(-8*s,-70*s);ctx.lineTo(18*s,-52*s);ctx.stroke();}
+  if(kind==='relay'){ctx.fillStyle='#25362a';ctx.fillRect(-38*s,-28*s,76*s,48*s);ctx.fillStyle=done?'#78965d':'#394b3f';ctx.fillRect(-30*s,-21*s,60*s,29*s);ctx.strokeStyle='#9aaa8c';ctx.lineWidth=1*s;for(let i=-20;i<25;i+=12){ctx.beginPath();ctx.moveTo(i*s,-16*s);ctx.lineTo(i*s,3*s);ctx.stroke();}}
+  if(kind==='radio'){ctx.fillStyle='#202c25';ctx.fillRect(-32*s,-35*s,64*s,48*s);ctx.fillStyle=done?'#809d66':'#4b594d';ctx.fillRect(-25*s,-28*s,50*s,24*s);ctx.fillStyle='#d1b36f';ctx.fillRect(-18*s,-21*s,28*s,3*s);}
+  if(!done){ctx.fillStyle='rgba(190,222,149,.85)';ctx.beginPath();ctx.arc(0,-52*s,3*s,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(190,222,149,.55)';ctx.beginPath();ctx.arc(0,-52*s,8*s+Math.sin(Date.now()/300)*2*s,0,Math.PI*2);ctx.stroke();}
+  ctx.restore();
+}
+
+function drawPlayer(ctx,p,s){
+  ctx.save();ctx.translate(p.x,p.y);
+  ctx.fillStyle='rgba(4,7,5,.55)';ctx.beginPath();ctx.ellipse(0,25*s,18*s,7*s,0,0,Math.PI*2);ctx.fill();
+  const leg=player.walk?Math.sin(player.walk)*4*s:0;
+  ctx.fillStyle='#171e19';ctx.fillRect(-9*s,8*s+leg,7*s,17*s);ctx.fillRect(2*s,8*s-leg,7*s,17*s);
+  ctx.fillStyle='#70846a';ctx.beginPath();ctx.moveTo(-13*s,-4*s);ctx.lineTo(-9*s,13*s);ctx.lineTo(10*s,13*s);ctx.lineTo(14*s,-4*s);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#26372d';ctx.fillRect(-5*s,-7*s,10*s,16*s);ctx.fillStyle='#b09a79';ctx.beginPath();ctx.arc(0,-16*s,7*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#263229';ctx.beginPath();ctx.arc(0,-20*s,8*s,Math.PI,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#9cc17d';ctx.fillRect(-17*s,-2*s,5*s,10*s);ctx.fillRect(12*s,-2*s,5*s,10*s);
+  ctx.restore();
+}
+
+function update(dt){
+  let dx=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0)+ (window.touchDX||0);
+  let dy=(keys.ArrowDown||keys.s?1:0)-(keys.ArrowUp||keys.w?1:0)+(window.touchDY||0);
+  const mag=Math.hypot(dx,dy);if(mag){dx/=mag;dy/=mag;player.x=Math.max(-.82,Math.min(.82,player.x+dx*.43*dt));player.y=Math.max(-.68,Math.min(.68,player.y+dy*.43*dt));player.a=Math.atan2(dy,dx);player.walk+=dt*9;}
+  nearest=null;let nd=1;
+  Object.entries(stations).forEach(([k,s])=>{if(s.done)return;let d=Math.hypot(player.x-s.x,player.y-s.y);if(d<.19&&d<nd){nearest=k;nd=d;}});
+  const el=$('#interaction');el.classList.toggle('visible',!!nearest);
+  if(nearest){$('#interactionName').textContent=stations[nearest].name;$('#interactionType').textContent=stations[nearest].type;}
+}
+
+function frame(t){update(Math.min(.033,(t-(frame.last||t))/1000));frame.last=t;drawWorld();requestAnimationFrame(frame);}requestAnimationFrame(frame);
+
+function completedCount(){return Object.values(stations).filter(s=>s.done).length;}
+function updateHUD(){
+  $('#nightLabel').textContent=`NIGHT ${String(state.night).padStart(2,'0')}`;
+  const count=completedCount();$('#objectiveCount').textContent=`${count} / 4`;$('#objectiveBar').style.width=`${count*25}%`;
+  $('#bodyValue').textContent='100';$('#powerValue').textContent=state.night===1?'72':state.night===2?'64':'58';$('#powerBar').style.width=$('#powerValue').textContent+'%';
+  $('#objectiveText').textContent=count===4?'Every system is stable. Return to the radio desk to transmit.':'Check the marked station equipment before the monsoon closes in.';
+  $('#objectiveTitle').textContent=count===4?'Begin night transmission':'Restore the station';
+  $('#signalText').textContent=count===4?'CARRIER LOCKED':'NO CARRIER';
+}
+
+function openJob(kind){
+  if($('#modalBackdrop').classList.contains('hidden')===false)return;
+  if(kind==='generator')openGenerator();if(kind==='dish')openDish();if(kind==='relay')openRelay();if(kind==='radio')openRadio();
+}
+
+function modal(title,kicker,body,foot=''){
+  $('#jobModal').innerHTML=`<header class="job-head"><div><small>${kicker}</small><h2>${title}</h2></div><button id="closeModal">CLOSE ×</button></header><div class="job-body">${body}</div><div class="job-foot">${foot}</div>`;
+  $('#modalBackdrop').classList.remove('hidden');$('#closeModal').onclick=closeModal;
+}
+function closeModal(){ $('#modalBackdrop').classList.add('hidden'); }
+function complete(kind,msg){stations[kind].done=true;state.completed[kind]=true;save();updateHUD();closeModal();toast(msg);}
+
+function openGenerator(){
+  const names=['Core pump','Comms rack','Workshop','Flood lamps'];
+  modal('Load distribution','GENERATOR 220V',`<div class="load-grid">${names.map((n,i)=>`<label>${n}<output id="gOut${i}">${state.load[i]}%</output><input type="range" min="0" max="100" value="${state.load[i]}" data-i="${i}"></label>`).join('')}</div><div class="job-meter"><div><i id="gMeter"></i></div><p id="gStatus">Balance total load below 90%.</p></div>`,'<button class="primary-action" id="gApply">STABILIZE LOAD</button>');
+  document.querySelectorAll('.load-grid input').forEach(inp=>inp.oninput=()=>{state.load[+inp.dataset.i]=+inp.value;$('#gOut'+inp.dataset.i).textContent=inp.value+'%';updateGen();});
+  function updateGen(){let sum=state.load.reduce((a,b)=>a+b,0),meter=$('#gMeter');meter.style.width=Math.min(100,sum)+'%';meter.style.background=sum>100?'#e58070':sum>=78&&sum<=92?'#b8dc91':'#ddb96d';$('#gStatus').textContent=sum>=78&&sum<=92?`Stable load: ${sum}%`:`Current load: ${sum}% — target 78–92%`;}
+  updateGen();$('#gApply').onclick=()=>{let sum=state.load.reduce((a,b)=>a+b,0);if(sum>=78&&sum<=92)complete('generator','Generator synchronized');else toast('Load is outside the safe operating band');};
+}
+
+function openDish(){modal('Directional alignment','MAST CONTROL','<div class="dish-grid"><div><label>AZIMUTH <output id="azOut">118°</output><input id="az" type="range" min="90" max="150" value="118"></label><label>ELEVATION <output id="elOut">31°</output><input id="el" type="range" min="20" max="42" value="31"></label></div><div class="scope"><canvas id="scope" width="260" height="180"></canvas></div></div>','<button class="primary-action" id="dishApply">LOCK AZ/EL</button>');
+  function draw(){let az=+$('#az').value,el=+$('#el').value;$('#azOut').textContent=az+'°';$('#elOut').textContent=el+'°';state.dishAz=az;state.dishEl=el;let c=$('#scope'),x=c.getContext('2d');x.clearRect(0,0,260,180);x.strokeStyle='rgba(184,220,145,.18)';for(let i=0;i<260;i+=26){x.beginPath();x.moveTo(i,0);x.lineTo(i,180);x.stroke()}for(let i=0;i<180;i+=26){x.beginPath();x.moveTo(0,i);x.lineTo(260,i);x.stroke()}let px=(az-90)/60*260,py=(42-el)/22*180,peak=1-Math.hypot(px-130,py-85)/170;x.fillStyle=`rgba(184,220,145,${.12+Math.max(0,peak)*.5})`;x.beginPath();x.arc(px,py,18,0,Math.PI*2);x.fill();x.strokeStyle='#b8dc91';x.beginPath();x.moveTo(130,90);x.lineTo(px,py);x.stroke();}
+  $('#az').oninput=$('#el').oninput=draw;draw();$('#dishApply').onclick=()=>{if(Math.abs(state.dishAz-132)<=3&&Math.abs(state.dishEl-34)<=2)complete('dish','Antenna locked on the relay vector');else toast('No carrier peak — sweep toward 132° / 34°')};
+}
+
+function openRelay(){
+  const seq=[5,2,7,4,1,8];let pos=0;
+  modal('Relay board','SPARE CIRCUIT K-19','<div class="relay-grid"><div class="relay-board">'+Array.from({length:8},(_,i)=>`<button class="relay-pad" data-pad="${i+1}">${String(i+1).padStart(2,'0')}</button>`).join('')+'</div><div class="relay-info"><strong>ORDER<br><span id="relayOrder">05</span></strong>Heat the pads in sequence.<br><small id="relayStatus">Awaiting first joint</small></div></div>','<button class="secondary-action" id="relayReset">RESET JOINTS</button>');
+  function reset(){pos=0;document.querySelectorAll('.relay-pad').forEach(b=>b.className='relay-pad');$('#relayOrder').textContent=String(seq[0]).padStart(2,'0');$('#relayStatus').textContent='Awaiting first joint';}
+  document.querySelectorAll('.relay-pad').forEach(b=>b.onclick=()=>{let n=+b.dataset.pad;if(n===seq[pos]){b.classList.add('done');pos++;if(pos===seq.length){complete('relay','Relay circuit continuity restored');}else{$('#relayOrder').textContent=String(seq[pos]).padStart(2,'0');$('#relayStatus').textContent=`Joint ${pos}/${seq.length} complete`;}}else{b.classList.add('wrong');setTimeout(()=>b.classList.remove('wrong'),220);$('#relayStatus').textContent='Open circuit — wrong pad';}});$('#relayReset').onclick=reset;
+}
+
+function openRadio(){
+  modal('Long-range receiver','RADIO 45-B','<div class="radio-grid"><div class="radio-screen"><div class="radio-frequency"><span id="freqNum">5.2</span> <small>MHz</small></div><canvas id="radioCanvas" width="300" height="70"></canvas></div><div class="radio-copy"><strong id="voiceText">The carrier is weak.</strong><p id="radioHint">Move across the band until the voice resolves.</p><input id="radioDial" type="range" min="38" max="68" value="52" style="width:100%;accent-color:#b8dc91"><div class="choice-list hidden" id="radioChoices"><button data-choice="reply">Reply: “Jungle Tower, we hear you.”</button><button data-choice="ignore">Remain silent and record the signal.</button></div></div></div>','<button class="secondary-action" id="closeRadio">LEAVE RECEIVER</button>');
+  $('#closeRadio').onclick=closeModal;
+  function drawRadio(){let v=+$('#radioDial').value;$('#freqNum').textContent=(v/10).toFixed(1);let c=$('#radioCanvas'),x=c.getContext('2d');x.clearRect(0,0,300,70);x.strokeStyle='rgba(184,220,145,.2)';for(let i=0;i<300;i+=25){x.beginPath();x.moveTo(i,0);x.lineTo(i,70);x.stroke()}x.beginPath();let target=state.night===1?52:state.night===2?61:44;for(let i=0;i<300;i++){let f=i/300*30+38,noise=.5*Math.exp(-Math.pow(f-target,2)/2)+.08*Math.random();let y=50-Math.abs(noise*28)*Math.sin(i*.12+Date.now()/120);if(i===0)x.moveTo(i,y);else x.lineTo(i,y);}x.strokeStyle='#b8dc91';x.stroke();if(Math.abs(v-target)<=1){$('#voiceText').textContent=state.night===1?'“Tower Seven… keep the light alive.”':state.night===2?'“The canopy moved before the landslide.”':'“Do not answer on the third call.”';$('#radioChoices').classList.remove('hidden');$('#radioHint').textContent='Voice lock established.';}else{$('#voiceText').textContent='The carrier is weak.';$('#radioHint').textContent='Move across the band until the voice resolves.';$('#radioChoices').classList.add('hidden');}}
+  $('#radioDial').oninput=drawRadio;drawRadio();
+  document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{if(completedCount()===4){state.ending=b.dataset.choice;save();closeModal();showEnding();}else toast('Restore all station systems before transmission');});
+}
+
+function showEnding(){
+  const choice=state.ending;
+  modal(choice==='reply'?'Signal held':'Watch remains','NIGHT '+String(state.night).padStart(2,'0')+' COMPLETE',`<div class="radio-copy"><p>${choice==='reply'?'You answer through the wet night. The distant voice repeats your call sign—then the tower light above you begins to blink in recognition.':'You leave the carrier intact and save every syllable. At dawn, the recorder resolves a map hidden beneath the interference.'}</p><p>The jungle stays, and the station stays awake.</p></div>`,'<button class="primary-action" id="nextNight">'+(state.night<3?'CONTINUE TO NEXT NIGHT':'SAVE FINAL RECORD')+'</button>');
+  $('#nextNight').onclick=()=>{if(state.night<3){state.night++;Object.keys(stations).forEach(k=>{stations[k].done=false;state.completed[k]=false});state.ending=null;save();updateHUD();closeModal();toast(`Night ${state.night} watch started`);}else{closeModal();toast('Final record saved to this device');}};
+}
+
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key==='e'||e.key==='E')if(nearest)openJob(nearest);});window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+
+$('#mapButton').onclick=()=>{$('#journalEntries').innerHTML=state.entries.length?state.entries.map(x=>`<div class="journal-entry"><strong>${x.title}</strong>${x.text}</div>`).join(''):`<div class="journal-entry"><strong>NIGHT ${state.night}</strong>Generator 220V · Antenna mast · Relay K-19 · Radio 45-B</div>`;$('#journalBackdrop').classList.remove('hidden');};
+$('#closeJournal').onclick=()=>$('#journalBackdrop').classList.add('hidden');
+$('#restartButton').onclick=()=>{localStorage.removeItem(SAVE);location.reload();};
+$('#soundButton').onclick=()=>{state.muted=!state.muted;save();$('#soundButton').textContent=state.muted?'SOUND OFF':'SOUND ON';toast(state.muted?'Ambience muted':'Ambience enabled');};
+
+function drawMinimap(){const c=$('#minimap'),x=c.getContext('2d'),w=c.width,h=c.height;x.clearRect(0,0,w,h);x.fillStyle='#132219';x.fillRect(0,0,w,h);x.strokeStyle='rgba(169,198,155,.12)';for(let i=0;i<150;i+=18){x.beginPath();x.moveTo(i,0);x.lineTo(i,150);x.stroke();x.beginPath();x.moveTo(0,i);x.lineTo(150,i);x.stroke();}Object.entries(stations).forEach(([k,s])=>{let px=75+s.x*58,py=75+s.y*58;x.fillStyle=s.done?'#60785e':'#ddb96d';x.beginPath();x.arc(px,py,3,0,Math.PI*2);x.fill();});let px=75+player.x*58,py=75+player.y*58;x.fillStyle='#bfe69a';x.beginPath();x.moveTo(px,py-5);x.lineTo(px+4,py+4);x.lineTo(px-4,py+4);x.closePath();x.fill();}
+
+const joy=$('#joystick'),knob=$('#joystickKnob');let active=false;function joyMove(e){if(!active)return;let r=joy.getBoundingClientRect(),p=e.touches?e.touches[0]:e,dx=p.clientX-(r.left+r.width/2),dy=p.clientY-(r.top+r.height/2),m=Math.hypot(dx,dy),lim=34;if(m>lim){dx=dx/m*lim;dy=dy/m*lim}knob.style.transform=`translate(${dx}px,${dy}px)`;window.touchDX=dx/lim;window.touchDY=dy/lim;}joy.addEventListener('touchstart',e=>{active=true;joyMove(e)},{passive:false});joy.addEventListener('touchmove',e=>{e.preventDefault();joyMove(e)},{passive:false});function endJoy(){active=false;window.touchDX=0;window.touchDY=0;knob.style.transform='';}joy.addEventListener('touchend',endJoy);$('#mobileAction').onclick=()=>{if(nearest)openJob(nearest)};
+
+setInterval(()=>{let mins=(48+Math.floor((Date.now()/60000)%12))%60;$('#clock').textContent=`23:${String(mins).padStart(2,'0')}`;},1000);
+updateHUD();
