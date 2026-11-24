@@ -11,6 +11,19 @@ radio:{name:'Radio Shack',type:'TUNE TRANSMISSION',x:-.05,y:-.46,done:false}
 
 let state={night:1,completed:{},load:[42,28,18,12],dishAz:118,dishEl:31,relaySteps:[],radioDial:52,ending:null,muted:false,entries:[],introSeen:false};
 let player={x:-.10,y:.12,a:0,walk:0,body:100,stamina:100};
+let characterModel=null,characterModelLoading=false;
+async function loadCharacterModel(){
+ if(characterModel||characterModelLoading)return;characterModelLoading=true;
+ try{
+  const [objText,mtlText]=await Promise.all([fetch('./assets/penjaga_menara_rimba_hd.obj').then(r=>r.ok?r.text():Promise.reject()),fetch('./assets/penjaga_menara_rimba_hd.mtl').then(r=>r.ok?r.text():Promise.reject())]);
+  const materials={};let mat=null;
+  mtlText.split('\n').forEach(line=>{const q=line.trim().split(/\s+/);if(q[0]==='newmtl')mat=q[1];else if(mat&&q[0]==='Kd')materials[mat]=q.slice(1).map(Number).slice(0,3);});
+  const vertices=[],faces=[];mat=null;
+  objText.split('\n').forEach(line=>{const q=line.trim().split(/\s+/);if(q[0]==='v')vertices.push([+q[1],+q[2],+q[3]]);else if(q[0]==='usemtl')mat=q[1];else if(q[0]==='f'){const ids=q.slice(1).map(v=>+v.split('/')[0]-1);if(ids.length>=3)faces.push({ids,mat});}});
+  characterModel={vertices,faces,materials};
+ }catch(e){console.warn('Character model unavailable:',e);}characterModelLoading=false;
+}
+loadCharacterModel();
 let keys={};let cameraShake=0;let nearest=null;let toastTimer=0;
 let rain=[];let fireflies=[];
 let introVisible=false;
@@ -36,7 +49,55 @@ function worldPoint(wx,wy,c){
   return {x:cx+(wx-wy)*220*scale,y:cy+(wx+wy)*105*scale};
 }
 
+let gl=null,glProgram=null,glVbo=null;
+
+function initWebGL(){
+  const c=$('#world');
+  gl=c.getContext('webgl',{antialias:true,alpha:false});
+  if(!gl){console.warn('WebGL unavailable');return false;}
+  const vs=`attribute vec3 p;attribute vec3 n;attribute vec3 col;uniform mat4 vp;uniform mat4 model;varying vec3 vCol;varying vec3 vNormal;varying vec3 vWorld;
+  void main(){vec4 w=model*vec4(p,1.0);vWorld=w.xyz;vNormal=mat3(model)*n;vCol=col;gl_Position=vp*w;}`;
+  const fs=`precision mediump float;varying vec3 vCol;varying vec3 vNormal;varying vec3 vWorld;uniform vec3 eye;uniform float fog;
+  void main(){vec3 N=normalize(vNormal);vec3 L=normalize(vec3(-.45,.85,.35));float d=max(dot(N,L),0.0);float dist=length(vWorld-eye);float fogMix=clamp((dist-8.0)/22.0,0.0,.82)*fog;vec3 light=vCol*(.42+d*.68);vec3 sky=mix(vec3(.025,.065,.045),vec3(.10,.20,.14),clamp(vWorld.y*.08+.5,0.0,1.0));gl_FragColor=vec4(mix(light,sky,fogMix),1.0);}`;
+  function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
+  glProgram=gl.createProgram();gl.attachShader(glProgram,shader(gl.VERTEX_SHADER,vs));gl.attachShader(glProgram,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(glProgram);gl.useProgram(glProgram);
+  gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.depthFunc(gl.LEQUAL);glVbo=gl.createBuffer();gl.clearColor(.025,.055,.043,1);return true;
+}
+function matMul(a,b){const r=new Float32Array(16);for(let c=0;c<4;c++)for(let rr=0;rr<4;rr++)for(let k=0;k<4;k++)r[c*4+rr]+=a[k*4+rr]*b[c*4+k];return r;}
+function matIdentity(){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);}
+function perspective(fovy,aspect,near,far){const f=1/Math.tan(fovy/2),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);}
+function normalize(v){const l=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/l,v[1]/l,v[2]/l]}function cross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
+function lookAt(e,t,u){const z=normalize([e[0]-t[0],e[1]-t[1],e[2]-t[2]]),x=normalize(cross(u,z)),y=cross(z,x);return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,e),-dot(y,e),-dot(z,e),1]);}
+function pushBox(out,x,y,z,sx,sy,sz,col,yaw=0){const c=Math.cos(yaw),q=Math.sin(yaw);function world(v){return[v[0]*c-v[2]*q+x,v[1]+y,v[0]*q+v[2]*c+z]}
+const tris=[[-1,-1,-1,1,-1,-1,1,1,-1],[ -1,-1,-1,1,1,-1,-1,1,-1],[1,-1,-1,1,-1,1,1,1,1],[1,-1,-1,1,1,1,1,1,-1],[1,-1,1,-1,-1,1,-1,1,1],[1,-1,1,-1,1,1,1,1,1],[-1,-1,1,-1,-1,-1,-1,1,-1],[-1,-1,1,-1,1,-1,-1,1,1],[-1,1,-1,1,1,-1,1,1,1],[-1,1,-1,1,1,1,-1,1,1],[-1,-1,-1,-1,-1,1,1,-1,1],[-1,-1,-1,1,-1,1,1,-1,-1]];
+const normals=[[0,0,-1],[0,0,-1],[1,0,0],[1,0,0],[0,0,1],[0,0,1],[-1,0,0],[-1,0,0],[0,1,0],[0,1,0],[0,-1,0],[0,-1,0]];
+tris.forEach((tri,ti)=>{for(let i=0;i<9;i+=3){const v=[tri[i]*sx,tri[i+1]*sy,tri[i+2]*sz],pt=world(v),n=normals[ti];out.push(...pt,...n,...col)}});
+}
+function addCharacter(out,x,y,z){if(!characterModel)return false;const m=characterModel,b={min:[Infinity,Infinity,Infinity],max:[-Infinity,-Infinity,-Infinity]};m.vertices.forEach(v=>v.forEach((n,i)=>{b.min[i]=Math.min(b.min[i],n);b.max[i]=Math.max(b.max[i],n)}));const cx=(b.min[0]+b.max[0])/2,cy=b.min[1],cz=(b.min[2]+b.max[2])/2,scale=1.72/Math.max(.01,b.max[1]-b.min[1]);const c=Math.cos(player.a),q=Math.sin(player.a);
+m.faces.forEach(f=>{if(f.ids.length<3)return;const pts=f.ids.map(i=>m.vertices[i]);const uvw=pts.map(v=>{const lx=(v[0]-cx)*.8,ly=(v[1]-cy)*scale,lz=(v[2]-cz)*.8;return[x+lx*c-lz*q,y+ly,z+lx*q+lz*c]});const u=[uvw[1][0]-uvw[0][0],uvw[1][1]-uvw[0][1],uvw[1][2]-uvw[0][2]],v=[uvw[2][0]-uvw[0][0],uvw[2][1]-uvw[0][1],uvw[2][2]-uvw[0][2]],n=normalize(cross(u,v)),col=m.materials[f.mat]||[.35,.42,.32];for(let i=0;i<3;i++)out.push(...uvw[i],...n,...col);});return true;}
+
+let glSceneReady=false;if(!glSceneReady)glSceneReady=initWebGL();
+
 function drawWorld(){
+  const c=$('#world');
+  if(!gl||!glSceneReady)return;
+  const dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;
+  if(c.width!==Math.floor(w*dpr)||c.height!==Math.floor(h*dpr)){c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);gl.viewport(0,0,c.width,c.height);}gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const tx=player.x*5,tz=player.y*5,eye=[tx-Math.sin(player.a)*4.5,3.2,tz+7.2],target=[tx,1,tz];
+  const vp=matMul(perspective(Math.PI/3,c.width/c.height,.1,60),lookAt(eye,target,[0,1,0]));gl.useProgram(glProgram);gl.uniformMatrix4fv(gl.getUniformLocation(glProgram,'vp'),false,vp);gl.uniform3fv(gl.getUniformLocation(glProgram,'eye'),new Float32Array(eye));gl.uniform1f(gl.getUniformLocation(glProgram,'fog'),1);
+  const data=[];pushBox(data,0,.02,0,4.2,.04,3.2,[.20,.25,.20]);
+  for(let gx=-16;gx<=16;gx+=2)for(let gz=-16;gz<=16;gz+=2)pushBox(data,gx,-.10,gz,.95,.05,.95,[.07+(Math.abs(gx+gz)%3)*.018,.15,.09]);
+  for(let i=0;i<46;i++){const ang=i*2.399,r=8+(i%7)*.72,x=Math.cos(ang)*r,z=Math.sin(ang)*r,hgt=1.7+(i%5)*.35;pushBox(data,x,hgt*.5,z,.08,hgt*.5,.08,[.18,.13,.07]);for(let j=0;j<5;j++)pushBox(data,x+Math.cos(j*1.257)*.42,hgt,z+Math.sin(j*1.257)*.42,.55,.025,.12,[.12,.31,.16],j*1.257);}
+  pushBox(data,-2.1,.65,1.25,.58,.65,.58,[.16,.23,.18]);pushBox(data,2.75,.55,-.25,.7,.55,.7,[.31,.35,.31]);pushBox(data,1,.45,2.75,.85,.45,.28,[.16,.23,.18]);pushBox(data,-.25,.48,-2.3,.65,.48,.45,[.14,.20,.16]);
+  pushBox(data,2.75,1.28,-.25,.025,1.2,.025,[.62,.68,.60]);pushBox(data,2.75,2.42,-.25,.55,.035,.055,[.48,.54,.48]);pushBox(data,.1,2.1,-.9,.08,2.1,.08,[.35,.43,.34]);
+  for(let y=.45;y<3.9;y+=.5){pushBox(data,.1,y,-.9,.42,.025,.025,[.28,.35,.28]);pushBox(data,.1,y,-.9,.025,.025,.42,[.28,.35,.28]);}
+  [[-2.1,1.25,1.25],[2.75,1.65,-.25],[1,1.15,2.75],[-.25,.95,-2.3]].forEach((p,i)=>{const k=Object.keys(stations)[i];if(!stations[k].done)pushBox(data,p[0],p[1],p[2],.09,.09,.09,[.75,.88,.48]);});
+  if(!addCharacter(data,tx,.02,tz)){pushBox(data,tx,.62,tz,.22,.62,.22,[.38,.48,.34],player.a);pushBox(data,tx,1.32,tz,.16,.18,.16,[.62,.52,.38],player.a);}
+  gl.bindBuffer(gl.ARRAY_BUFFER,glVbo);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);const stride=36,lp=gl.getAttribLocation(glProgram,'p'),ln=gl.getAttribLocation(glProgram,'n'),lc=gl.getAttribLocation(glProgram,'col');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,3,gl.FLOAT,false,stride,0);gl.enableVertexAttribArray(ln);gl.vertexAttribPointer(ln,3,gl.FLOAT,false,stride,12);gl.enableVertexAttribArray(lc);gl.vertexAttribPointer(lc,3,gl.FLOAT,false,stride,24);gl.uniformMatrix4fv(gl.getUniformLocation(glProgram,'model'),false,matIdentity());gl.drawArrays(gl.TRIANGLES,0,data.length/9);drawMinimap();
+}
+
+function drawWorldLegacyPlaceholder(){
   const c=$('#world'),ctx=c.getContext('2d');
   const dpr=Math.min(devicePixelRatio||1,2);const w=c.clientWidth,h=c.clientHeight;
   if(c.width!==w*dpr||c.height!==h*dpr){c.width=w*dpr;c.height=h*dpr;}
@@ -116,14 +177,18 @@ function drawStation(ctx,kind,p,s,done){
 }
 
 function drawPlayer(ctx,p,s){
-  ctx.save();ctx.translate(p.x,p.y);
-  ctx.fillStyle='rgba(4,7,5,.55)';ctx.beginPath();ctx.ellipse(0,25*s,18*s,7*s,0,0,Math.PI*2);ctx.fill();
+ ctx.save();ctx.translate(p.x,p.y);
+ ctx.fillStyle='rgba(4,7,5,.62)';ctx.beginPath();ctx.ellipse(0,24*s,22*s,8*s,0,0,Math.PI*2);ctx.fill();
+ if(!characterModel){
   const leg=player.walk?Math.sin(player.walk)*4*s:0;
   ctx.fillStyle='#171e19';ctx.fillRect(-9*s,8*s+leg,7*s,17*s);ctx.fillRect(2*s,8*s-leg,7*s,17*s);
   ctx.fillStyle='#70846a';ctx.beginPath();ctx.moveTo(-13*s,-4*s);ctx.lineTo(-9*s,13*s);ctx.lineTo(10*s,13*s);ctx.lineTo(14*s,-4*s);ctx.closePath();ctx.fill();
-  ctx.fillStyle='#26372d';ctx.fillRect(-5*s,-7*s,10*s,16*s);ctx.fillStyle='#b09a79';ctx.beginPath();ctx.arc(0,-16*s,7*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#263229';ctx.beginPath();ctx.arc(0,-20*s,8*s,Math.PI,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#9cc17d';ctx.fillRect(-17*s,-2*s,5*s,10*s);ctx.fillRect(12*s,-2*s,5*s,10*s);
-  ctx.restore();
+  ctx.fillStyle='#26372d';ctx.fillRect(-5*s,-7*s,10*s,16*s);ctx.fillStyle='#b09a79';ctx.beginPath();ctx.arc(0,-16*s,7*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#263229';ctx.beginPath();ctx.arc(0,-20*s,8*s,Math.PI,Math.PI*2);ctx.fill();ctx.fillStyle='#9cc17d';ctx.fillRect(-17*s,-2*s,5*s,10*s);ctx.fillRect(12*s,-2*s,5*s,10*s);ctx.restore();return;
+ }
+ const m=characterModel,pixelScale=s*76,yaw=player.a+Math.PI*.5,cy=Math.cos(yaw),sy=Math.sin(yaw);
+ const projected=m.faces.map(face=>{const pts=face.ids.map(i=>{let [x,y,z]=m.vertices[i],xr=x*cy-z*sy,zr=x*sy+z*cy;return{x:p.x+xr*pixelScale,y:p.y-y*.92*pixelScale,z:zr+y*.02};});return{pts,depth:(pts[0].z+pts[1].z+pts[2].z)/3,mat:face.mat};}).sort((a,b)=>a.depth-b.depth);
+ projected.forEach(face=>{const c=m.materials[face.mat]||[.35,.39,.31],shade=Math.max(.48,Math.min(1.12,.82-Math.sin(face.depth*2)*.08));ctx.beginPath();ctx.moveTo(face.pts[0].x,face.pts[0].y);for(let i=1;i<face.pts.length;i++)ctx.lineTo(face.pts[i].x,face.pts[i].y);ctx.closePath();ctx.fillStyle=`rgb(${Math.round(c[0]*255*shade)},${Math.round(c[1]*255*shade)},${Math.round(c[2]*255*shade)})`;ctx.fill();});
+ ctx.restore();
 }
 
 function update(dt){

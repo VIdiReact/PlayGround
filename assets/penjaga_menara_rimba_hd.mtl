@@ -1,0 +1,171 @@
+# High-Detail PBR Material Library - Penjaga Menara Rimba (Sinyal Tengah Malam)
+newmtl BootSole
+Ka 0.05 0.05 0.05
+Kd 0.09 0.09 0.10
+Ks 0.15 0.15 0.15
+Ns 25.0
+
+newmtl DarkBootLeather
+Ka 0.08 0.07 0.06
+Kd 0.14 0.12 0.11
+Ks 0.28 0.26 0.24
+Ns 45.0
+
+newmtl BootLace
+Ka 0.06 0.06 0.06
+Kd 0.12 0.11 0.10
+Ks 0.05 0.05 0.05
+Ns 10.0
+
+newmtl OliveCargo
+Ka 0.12 0.14 0.10
+Kd 0.22 0.26 0.19
+Ks 0.06 0.06 0.05
+Ns 12.0
+
+newmtl OliveCargoDark
+Ka 0.09 0.11 0.08
+Kd 0.17 0.21 0.15
+Ks 0.06 0.06 0.05
+Ns 12.0
+
+newmtl WeatheredLeather
+Ka 0.18 0.10 0.06
+Kd 0.34 0.19 0.11
+Ks 0.25 0.18 0.12
+Ns 35.0
+
+newmtl BrushedSteel
+Ka 0.35 0.37 0.39
+Kd 0.72 0.75 0.78
+Ks 0.85 0.85 0.88
+Ns 110.0
+
+newmtl SafetyYellow
+Ka 0.45 0.35 0.05
+Kd 0.88 0.68 0.10
+Ks 0.35 0.30 0.15
+Ns 45.0
+
+newmtl SafetyYellowGloss
+Ka 0.48 0.38 0.06
+Kd 0.94 0.74 0.12
+Ks 0.65 0.60 0.30
+Ns 95.0
+
+newmtl LCD_Dark
+Ka 0.08 0.12 0.10
+Kd 0.16 0.24 0.20
+Ks 0.45 0.50 0.48
+Ns 80.0
+
+newmtl DarkPlastic
+Ka 0.05 0.05 0.06
+Kd 0.10 0.11 0.12
+Ks 0.30 0.30 0.32
+Ns 55.0
+
+newmtl ToolBlue
+Ka 0.06 0.18 0.38
+Kd 0.12 0.36 0.75
+Ks 0.35 0.40 0.50
+Ns 50.0
+
+newmtl SafetyOrange
+Ka 0.45 0.16 0.04
+Kd 0.88 0.32 0.08
+Ks 0.30 0.25 0.15
+Ns 45.0
+
+newmtl WoodHandle
+Ka 0.25 0.16 0.09
+Kd 0.48 0.31 0.18
+Ks 0.18 0.14 0.10
+Ns 25.0
+
+newmtl FlannelPlaid
+Ka 0.24 0.08 0.07
+Kd 0.46 0.14 0.12
+Ks 0.06 0.05 0.05
+Ns 12.0
+
+newmtl GreyCotton
+Ka 0.18 0.19 0.20
+Kd 0.35 0.37 0.39
+Ks 0.04 0.04 0.04
+Ns 10.0
+
+newmtl NavyVest
+Ka 0.07 0.10 0.15
+Kd 0.13 0.19 0.28
+Ks 0.10 0.12 0.15
+Ns 18.0
+
+newmtl ReflectiveNeon
+Ka 0.45 0.48 0.08
+Kd 0.86 0.90 0.16
+Ke 0.15 0.16 0.02
+Ks 0.75 0.75 0.40
+Ns 85.0
+
+newmtl RadioOliveDark
+Ka 0.08 0.10 0.08
+Kd 0.15 0.19 0.15
+Ks 0.25 0.25 0.25
+Ns 40.0
+
+newmtl GlowGreenLCD
+Ka 0.10 0.48 0.18
+Kd 0.18 0.92 0.35
+Ke 0.15 0.85 0.30
+Ks 0.50 0.60 0.50
+Ns 70.0
+
+newmtl CanvasOlive
+Ka 0.18 0.17 0.12
+Kd 0.36 0.33 0.24
+Ks 0.05 0.05 0.04
+Ns 10.0
+
+newmtl CanvasOliveDark
+Ka 0.13 0.12 0.09
+Kd 0.26 0.24 0.18
+Ks 0.05 0.05 0.04
+Ns 10.0
+
+newmtl SkinRealistic
+Ka 0.36 0.25 0.19
+Kd 0.74 0.52 0.40
+Ks 0.14 0.11 0.10
+Ns 24.0
+
+newmtl WorkGloveGrey
+Ka 0.22 0.22 0.20
+Kd 0.44 0.43 0.39
+Ks 0.08 0.08 0.07
+Ns 14.0
+
+newmtl DarkRubber
+Ka 0.04 0.04 0.04
+Kd 0.08 0.08 0.09
+Ks 0.12 0.12 0.12
+Ns 20.0
+
+newmtl EyeSclera
+Ka 0.45 0.44 0.43
+Kd 0.92 0.90 0.88
+Ks 0.60 0.60 0.60
+Ns 90.0
+
+newmtl DarkHair
+Ka 0.05 0.04 0.04
+Kd 0.10 0.08 0.07
+Ks 0.18 0.16 0.15
+Ns 30.0
+
+newmtl HeadlampGlow
+Ka 0.50 0.46 0.32
+Kd 1.00 0.95 0.72
+Ke 1.00 0.92 0.62
+Ks 0.80 0.80 0.70
+Ns 100.0
